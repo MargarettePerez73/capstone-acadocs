@@ -1,265 +1,397 @@
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, Animated,
+} from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth, DEMO_ACCOUNTS } from '@/context/AuthContext';
+import { Colors } from '@/constants/Colors';
 
-const LATITUDE = '14.067291';
-const LONGITUDE = '120.626720';
+export default function LoginScreen() {
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
-interface WeatherData {
-  temp: number;
-  condition: string;
-  humidity: number;
-  windSpeed: number;
-}
-
-export default function HomeScreen() {
-  const [time, setTime] = useState(new Date());
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const getWeatherCondition = (code: number): string => {
-    if (code === 0) return 'Clear Sky';
-    if (code >= 1 && code <= 3) return 'Partly Cloudy';
-    if (code >= 61 && code <= 65) return 'Rainy';
-    if (code >= 95 && code <= 99) return 'Thunderstorm';
-    return 'Cloudy';
-  };
-
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&wind_speed_unit=kmh`
-        );
-        
-        if (!response.ok) {
-          throw new Error('Network error');
-        }
-
-        const data = await response.json();
-        const currentData = data.current;
-
-        setWeather({
-          temp: Math.round(currentData.temperature_2m),
-          condition: getWeatherCondition(currentData.weather_code),
-          humidity: currentData.relative_humidity_2m,
-          windSpeed: Math.round(currentData.wind_speed_10m),
-        });
-        setError(null);
-      } catch (err) {
-        setError('Could not update weather.');
-        console.error(err);
-      } finally {
-        setLoading(false);
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Required', 'Please enter your email and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const success = await login(email.trim(), password);
+      if (success) {
+        router.replace('/(auth)/(tabs)/dashboard');
+      } else {
+        Alert.alert('Login Failed', 'Incorrect email or password. Please check your credentials.');
       }
-    };
-
-    fetchWeather();
-  }, []);
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour12: true });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
+  const fillCredentials = (acc: typeof DEMO_ACCOUNTS[0]) => {
+    setEmail(acc.email);
+    setPassword(acc.password);
+    setShowDemo(false);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-              <View style={styles.locationContainer}>
-          <Ionicons name="location-sharp" size={16} color="#E5A93C" />
-          <Text style={styles.locationText}>NASUGBU BATANGAS, PH</Text>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {/* ── Hero ── */}
+        <View style={styles.hero}>
+          <View style={styles.logoRing}>
+            <View style={styles.logoInner}>
+              <Ionicons name="school" size={42} color={Colors.white} />
+            </View>
+          </View>
+          <Text style={styles.appName}>AcadTrack</Text>
+          <Text style={styles.tagline}>Academic Submission{'\n'}& Monitoring System</Text>
+          <View style={styles.heroDivider} />
+          <Text style={styles.schoolLabel}>School Year 2024 — 2025</Text>
         </View>
 
-
+        {/* ── Form Card ── */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="time-outline" size={16} color="#E5A93C" />
-            <Text style={styles.cardLabel}>CURRENT TIME</Text>
-          </View>
-          <Text style={styles.timeText}>{formatTime(time)}</Text>
-          <Text style={styles.dateText}>{formatDate(time)}</Text>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="help-circle-outline" size={16} color="#E5A93C" />
-            <Text style={styles.cardLabel}>WEATHER UPDATES</Text>
+          <Text style={styles.cardTitle}>Sign In to Your Account</Text>
+          <Text style={styles.cardSub}>Use your institutional email and password.</Text>
+
+          {/* Email */}
+          <Text style={styles.fieldLabel}>Email Address</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="mail-outline" size={17} color={Colors.text.muted} />
+            <TextInput
+              style={styles.inputField}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="yourname@school.edu"
+              placeholderTextColor={Colors.text.muted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
 
-          {loading ? (
-            <ActivityIndicator size="large" color="#E5A93C" style={{ marginVertical: 20 }} />
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : weather ? (
-            <>
-              <Text style={styles.temperature}>{weather.temp}°C</Text>
-              <Text style={styles.weatherCondition}>{weather.condition}</Text>
-              
-              <View style={styles.weatherDetailsRow}>
-                <View style={styles.weatherDetailItem}>
-                  <Text style={styles.detailLabel}>Humidity</Text>
-                  <Text style={styles.detailValue}>{weather.humidity}%</Text>
+          {/* Password */}
+          <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Password</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="lock-closed-outline" size={17} color={Colors.text.muted} />
+            <TextInput
+              style={styles.inputField}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              placeholderTextColor={Colors.text.muted}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={17} color={Colors.text.muted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign In Button */}
+          <TouchableOpacity
+            style={[styles.loginBtn, loading && styles.loginBtnLoading]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.82}
+          >
+            {loading
+              ? <Text style={styles.loginBtnText}>Authenticating...</Text>
+              : (
+                <View style={styles.loginBtnInner}>
+                  <Text style={styles.loginBtnText}>Sign In</Text>
+                  <Ionicons name="arrow-forward" size={18} color={Colors.white} />
                 </View>
-                <View style={styles.weatherDetailItem}>
-                  <Text style={styles.detailLabel}>Wind</Text>
-                  <Text style={styles.detailValue}>{weather.windSpeed} km/h</Text>
-                </View>
-              </View>
-            </>
-          ) : null}
+              )
+            }
+          </TouchableOpacity>
+
+          {/* Demo Credentials Toggle */}
+          <TouchableOpacity style={styles.demoToggle} onPress={() => setShowDemo(v => !v)}>
+            <Ionicons name="information-circle-outline" size={15} color={Colors.maroon.primary} />
+            <Text style={styles.demoToggleText}>
+              {showDemo ? 'Hide' : 'Show'} demo credentials
+            </Text>
+            <Ionicons name={showDemo ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.maroon.primary} />
+          </TouchableOpacity>
+
+          {/* Demo Accounts Grid */}
+          {showDemo && (
+            <View style={styles.demoGrid}>
+              <Text style={styles.demoGridTitle}>Tap a role to auto-fill credentials</Text>
+              {DEMO_ACCOUNTS.map(acc => (
+                <TouchableOpacity
+                  key={acc.email}
+                  style={styles.demoCard}
+                  onPress={() => fillCredentials(acc)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.demoAvatar, { backgroundColor: acc.color }]}>
+                    <Text style={styles.demoAvatarText}>{acc.initials}</Text>
+                  </View>
+                  <View style={styles.demoCardInfo}>
+                    <Text style={styles.demoCardName}>{acc.label}</Text>
+                    <Text style={styles.demoCardRole}>{acc.role}</Text>
+                    <Text style={styles.demoCardEmail}>{acc.email}</Text>
+                  </View>
+                  <View style={[styles.demoBadge, { backgroundColor: acc.color + '18' }]}>
+                    <Text style={[styles.demoBadgeText, { color: acc.color }]}>{acc.password}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <FontAwesome5 name="react" size={14} color="#E5A93C" />
-            <Text style={styles.cardLabel}>REACT NATIVE</Text>
-          </View>
-          <Text style={styles.name}>Sir Mags</Text>
-        </View>
+
+        {/* ── Footer ── */}
         <View style={styles.footer}>
-          <FontAwesome5 name="react" size={12} color="#E5A93C" />
-          <Text style={styles.footerText}>REACT NATIVE - LIVE MONITORS</Text>
+          <Ionicons name="shield-checkmark-outline" size={12} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.footerText}>Secured institutional access only</Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
-///////////////////////////////////////////////////////////// STYLESHEET ///////////////////////////////////////////////////////////////////////
-
-
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#3A0D11',
+    backgroundColor: Colors.maroon.primary,
   },
-  scrollContainer: {
-    padding: 24,
+  scroll: {
+    flexGrow: 1,
+  },
+
+  /* Hero */
+  hero: {
     alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 72 : 54,
+    paddingBottom: 36,
+    paddingHorizontal: 24,
   },
-  locationContainer: {
+  logoRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  logoInner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appName: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: Colors.white,
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  tagline: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  heroDivider: {
+    width: 36,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 2,
+    marginVertical: 14,
+  },
+  schoolLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  /* Card */
+  card: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 30,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    flex: 1,
+    minHeight: 420,
+  },
+  cardTitle: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: Colors.text.primary,
+    marginBottom: 5,
+  },
+  cardSub: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginBottom: 24,
+    lineHeight: 18,
+  },
+
+  /* Fields */
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  inputRow: {
     flexDirection: 'row',
-    backgroundColor: '#4A0E17',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  inputField: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text.primary,
+  },
+
+  /* Login Button */
+  loginBtn: {
+    backgroundColor: Colors.maroon.primary,
+    borderRadius: 12,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+    marginBottom: 16,
+    elevation: 3,
+    shadowColor: Colors.maroon.dark,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  loginBtnLoading: { opacity: 0.7 },
+  loginBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
+
+  /* Demo Toggle */
+  demoToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: 8,
-    paddingHorizontal: 20,
+  },
+  demoToggleText: {
+    fontSize: 13,
+    color: Colors.maroon.primary,
+    fontWeight: '600',
+  },
+
+  /* Demo Grid */
+  demoGrid: {
+    marginTop: 10,
+    marginBottom: 8,
+    backgroundColor: Colors.maroon.surface,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+  },
+  demoGridTitle: {
+    fontSize: 11,
+    color: Colors.text.muted,
+    textAlign: 'center',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontWeight: '600',
+  },
+  demoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    padding: 12,
+    gap: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  demoAvatar: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 24,
-    marginTop: 10,
+    justifyContent: 'center',
   },
-  locationText: {
-    color: '#D4AF37', 
-    fontWeight: '700',
-    fontSize: 12,
-    letterSpacing: 0.5,
-  },
-  card: {
-    borderColor: '#ffffff',
-    backgroundColor: '#4A0E17',
-    width: '100%',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  cardLabel: {
-    color: '#D4AF37',
-    fontSize: 11,
+  demoAvatarText: {
+    color: Colors.white,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 1,
   },
-  timeText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  dateText: {
-    color: '#A3A3A3',
-    fontSize: 14,
-  },
-  temperature: {
-    color: '#FFFFFF',
-    fontSize: 44,
-    fontWeight: 'bold',
-  },
-  weatherCondition: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 16,
-  },
-  weatherDetailsRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#2A080C',
-    paddingTop: 12,
-  },
-  weatherDetailItem: {
+  demoCardInfo: {
     flex: 1,
-    alignItems: 'center',
   },
-  detailLabel: {
-    color: '#B09A9C',
-    fontSize: 10,
+  demoCardName: {
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 2,
+    color: Colors.text.primary,
   },
-  detailValue: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
+  demoCardRole: {
+    fontSize: 11,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+    marginTop: 1,
   },
-  errorText: {
-    color: '#FF6B6B',
-    fontSize: 14,
-    textAlign: 'center',
-    marginVertical: 10,
+  demoCardEmail: {
+    fontSize: 10,
+    color: Colors.text.muted,
+    marginTop: 1,
   },
-  name: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '900',
-    textAlign: 'center',
-    paddingVertical: 10,
-    letterSpacing: 0.5,
+  demoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
+  demoBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+
+  /* Footer */
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    marginTop: 20,
-    opacity: 0.6,
+    backgroundColor: Colors.maroon.dark,
+    paddingVertical: 14,
   },
   footerText: {
-    color: '#D4AF37',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.3,
   },
 });
