@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
@@ -8,8 +8,10 @@ import Header from '@/components/ui/Header';
 import KPICard from '@/components/dashboard/KPICard';
 import MpsBar from '@/components/dashboard/MpsBar';
 import Card from '@/components/ui/Card';
+import { SkeletonDashboard } from '@/components/ui/SkeletonLoader';
 import { useAuth } from '@/context/AuthContext';
 import { useDrawer } from '@/context/DrawerContext';
+import { useToast } from '@/context/ToastContext';
 import { Colors } from '@/constants/Colors';
 import { KPI_DATA, MPS_RECORDS, ANNOUNCEMENTS, SUBMISSIONS } from '@/data/mockData';
 
@@ -117,14 +119,27 @@ const QUICK_CARDS: QuickCard[] = [
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { toggleDrawer } = useDrawer();
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const isAdmin = user?.role === 'principal' || user?.role === 'adas';
   const isTeacher = user?.role === 'teacher';
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setInitialLoading(false);
+      toast.success('Dashboard loaded', 'Data is up to date.');
+    }, 1400);
+    return () => clearTimeout(t);
+  }, []);
+
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1200);
+    setTimeout(() => {
+      setRefreshing(false);
+      toast.success('Refreshed', 'Dashboard data has been updated.');
+    }, 1400);
   };
 
   const pendingCount = SUBMISSIONS.filter(s => s.status === 'pending' || s.status === 'missing').length;
@@ -149,8 +164,10 @@ export default function DashboardScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.maroon.primary} colors={[Colors.maroon.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.maroon.primary} colors={[Colors.maroon.primary]} title="Refreshing dashboard..." />}
       >
+        {initialLoading && <SkeletonDashboard />}
+        {!initialLoading && <>
 
         {/* ─── User Banner ─────────────────────────── */}
         <View style={styles.userBanner}>
@@ -270,6 +287,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
         ))}
+        </>}
       </ScrollView>
     </View>
   );
