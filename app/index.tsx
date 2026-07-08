@@ -1,34 +1,71 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform, Animated,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth, DEMO_ACCOUNTS } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
+import InlineError from '@/components/ui/InlineError';
 import { Colors } from '@/constants/Colors';
+
+function validate(email: string, password: string) {
+  const errors: { email?: string; password?: string } = {};
+  if (!email.trim()) {
+    errors.email = 'Email address is required.';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    errors.email = 'Please enter a valid email address.';
+  }
+  if (!password) {
+    errors.password = 'Password is required.';
+  } else if (password.length < 6) {
+    errors.password = 'Password must be at least 6 characters.';
+  }
+  return errors;
+}
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
+
+  const getFieldErrors = () => validate(email, password);
+
+  const handleBlur = (field: 'email' | 'password') => {
+    setTouched(t => ({ ...t, [field]: true }));
+    setErrors(validate(email, password));
+  };
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Required', 'Please enter your email and password.');
+    const validationErrors = validate(email, password);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      setTouched({ email: true, password: true });
+      toast.warning('Check your inputs', 'Please fix the highlighted fields.');
       return;
     }
+
     setLoading(true);
+    toast.info('Authenticating...', 'Verifying your credentials.');
     try {
       const success = await login(email.trim(), password);
       if (success) {
+        toast.success('Login successful', 'Welcome back!');
         router.replace('/(auth)/(tabs)/dashboard');
       } else {
-        Alert.alert('Login Failed', 'Incorrect email or password. Please check your credentials.');
+        toast.error('Login failed', 'Incorrect email or password. Please try again.');
+        setErrors({ password: 'Incorrect email or password.' });
+        setTouched({ email: true, password: true });
       }
+    } catch {
+      toast.error('Connection error', 'Unable to reach the server. Check your network.');
     } finally {
       setLoading(false);
     }
@@ -37,8 +74,14 @@ export default function LoginScreen() {
   const fillCredentials = (acc: typeof DEMO_ACCOUNTS[0]) => {
     setEmail(acc.email);
     setPassword(acc.password);
+    setErrors({});
+    setTouched({});
     setShowDemo(false);
+    toast.info('Credentials loaded', `Ready to sign in as ${acc.role}.`);
   };
+
+  const emailError = touched.email ? errors.email : undefined;
+  const passwordError = touched.password ? errors.password : undefined;
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -59,42 +102,67 @@ export default function LoginScreen() {
 
         {/* ── Form Card ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sign In to Your Account</Text>
+          <Text style={styles.cardTitle}>Sign In</Text>
           <Text style={styles.cardSub}>Use your institutional email and password.</Text>
 
-          {/* Email */}
+          {/* Email Field */}
           <Text style={styles.fieldLabel}>Email Address</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="mail-outline" size={17} color={Colors.text.muted} />
+          <View style={[styles.inputRow, emailError && styles.inputRowError]}>
+            <Ionicons
+              name="mail-outline"
+              size={17}
+              color={emailError ? Colors.status.missing : Colors.text.muted}
+            />
             <TextInput
               style={styles.inputField}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={v => { setEmail(v); if (touched.email) setErrors(validate(v, password)); }}
+              onBlur={() => handleBlur('email')}
               placeholder="yourname@school.edu"
               placeholderTextColor={Colors.text.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!loading}
             />
+            {email.length > 0 && !emailError && touched.email && (
+              <Ionicons name="checkmark-circle" size={16} color={Colors.status.submitted} />
+            )}
           </View>
+          <InlineError message={emailError} />
 
-          {/* Password */}
-          <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Password</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="lock-closed-outline" size={17} color={Colors.text.muted} />
+          {/* Password Field */}
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Password</Text>
+          <View style={[styles.inputRow, passwordError && styles.inputRowError]}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={17}
+              color={passwordError ? Colors.status.missing : Colors.text.muted}
+            />
             <TextInput
               style={styles.inputField}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={v => { setPassword(v); if (touched.password) setErrors(validate(email, v)); }}
+              onBlur={() => handleBlur('password')}
               placeholder="Enter your password"
               placeholderTextColor={Colors.text.muted}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              editable={!loading}
             />
-            <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={17} color={Colors.text.muted} />
+            <TouchableOpacity
+              onPress={() => setShowPassword(v => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              disabled={loading}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={17}
+                color={Colors.text.muted}
+              />
             </TouchableOpacity>
           </View>
+          <InlineError message={passwordError} />
 
           {/* Sign In Button */}
           <TouchableOpacity
@@ -103,30 +171,31 @@ export default function LoginScreen() {
             disabled={loading}
             activeOpacity={0.82}
           >
-            {loading
-              ? <Text style={styles.loginBtnText}>Authenticating...</Text>
-              : (
-                <View style={styles.loginBtnInner}>
-                  <Text style={styles.loginBtnText}>Sign In</Text>
-                  <Ionicons name="arrow-forward" size={18} color={Colors.white} />
-                </View>
-              )
-            }
+            {loading ? (
+              <View style={styles.loginBtnInner}>
+                <ActivityIndicator color={Colors.white} size="small" />
+                <Text style={styles.loginBtnText}>Authenticating...</Text>
+              </View>
+            ) : (
+              <View style={styles.loginBtnInner}>
+                <Text style={styles.loginBtnText}>Sign In</Text>
+                <Ionicons name="arrow-forward" size={18} color={Colors.white} />
+              </View>
+            )}
           </TouchableOpacity>
 
-          {/* Demo Credentials Toggle */}
-          <TouchableOpacity style={styles.demoToggle} onPress={() => setShowDemo(v => !v)}>
+          {/* Demo Credentials */}
+          <TouchableOpacity style={styles.demoToggle} onPress={() => setShowDemo(v => !v)} disabled={loading}>
             <Ionicons name="information-circle-outline" size={15} color={Colors.maroon.primary} />
             <Text style={styles.demoToggleText}>
-              {showDemo ? 'Hide' : 'Show'} demo credentials
+              {showDemo ? 'Hide' : 'View'} demo accounts
             </Text>
             <Ionicons name={showDemo ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.maroon.primary} />
           </TouchableOpacity>
 
-          {/* Demo Accounts Grid */}
           {showDemo && (
             <View style={styles.demoGrid}>
-              <Text style={styles.demoGridTitle}>Tap a role to auto-fill credentials</Text>
+              <Text style={styles.demoGridTitle}>Tap a role to fill credentials</Text>
               {DEMO_ACCOUNTS.map(acc => (
                 <TouchableOpacity
                   key={acc.email}
@@ -162,15 +231,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.maroon.primary,
-  },
-  scroll: {
-    flexGrow: 1,
-  },
+  root: { flex: 1, backgroundColor: Colors.maroon.primary },
+  scroll: { flexGrow: 1 },
 
-  /* Hero */
   hero: {
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 72 : 54,
@@ -196,35 +259,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  appName: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: Colors.white,
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  tagline: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.72)',
-    textAlign: 'center',
-    lineHeight: 21,
-  },
-  heroDivider: {
-    width: 36,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 2,
-    marginVertical: 14,
-  },
-  schoolLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.55)',
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
+  appName: { fontSize: 34, fontWeight: '800', color: Colors.white, letterSpacing: 1.5, marginBottom: 6 },
+  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.72)', textAlign: 'center', lineHeight: 21 },
+  heroDivider: { width: 36, height: 2, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2, marginVertical: 14 },
+  schoolLabel: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' },
 
-  /* Card */
   card: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: 30,
@@ -235,20 +274,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 420,
   },
-  cardTitle: {
-    fontSize: 21,
-    fontWeight: '800',
-    color: Colors.text.primary,
-    marginBottom: 5,
-  },
-  cardSub: {
-    fontSize: 13,
-    color: Colors.text.secondary,
-    marginBottom: 24,
-    lineHeight: 18,
-  },
+  cardTitle: { fontSize: 21, fontWeight: '800', color: Colors.text.primary, marginBottom: 5 },
+  cardSub: { fontSize: 13, color: Colors.text.secondary, marginBottom: 24, lineHeight: 18 },
 
-  /* Fields */
   fieldLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -268,13 +296,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 52,
   },
-  inputField: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text.primary,
+  inputRowError: {
+    borderColor: Colors.status.missing,
+    backgroundColor: '#FFF5F5',
   },
+  inputField: { flex: 1, fontSize: 15, color: Colors.text.primary },
 
-  /* Login Button */
   loginBtn: {
     backgroundColor: Colors.maroon.primary,
     borderRadius: 12,
@@ -289,11 +316,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
-  loginBtnLoading: { opacity: 0.7 },
+  loginBtnLoading: { opacity: 0.8 },
   loginBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
 
-  /* Demo Toggle */
   demoToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,13 +327,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
   },
-  demoToggleText: {
-    fontSize: 13,
-    color: Colors.maroon.primary,
-    fontWeight: '600',
-  },
+  demoToggleText: { fontSize: 13, color: Colors.maroon.primary, fontWeight: '600' },
 
-  /* Demo Grid */
   demoGrid: {
     marginTop: 10,
     marginBottom: 8,
@@ -338,49 +359,15 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
-  demoAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  demoAvatarText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  demoCardInfo: {
-    flex: 1,
-  },
-  demoCardName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.text.primary,
-  },
-  demoCardRole: {
-    fontSize: 11,
-    color: Colors.text.secondary,
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  demoCardEmail: {
-    fontSize: 10,
-    color: Colors.text.muted,
-    marginTop: 1,
-  },
-  demoBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  demoBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
+  demoAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  demoAvatarText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
+  demoCardInfo: { flex: 1 },
+  demoCardName: { fontSize: 13, fontWeight: '700', color: Colors.text.primary },
+  demoCardRole: { fontSize: 11, color: Colors.text.secondary, fontWeight: '600', marginTop: 1 },
+  demoCardEmail: { fontSize: 10, color: Colors.text.muted, marginTop: 1 },
+  demoBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
+  demoBadgeText: { fontSize: 11, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
 
-  /* Footer */
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,9 +376,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.maroon.dark,
     paddingVertical: 14,
   },
-  footerText: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 0.3,
-  },
+  footerText: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 },
 });
