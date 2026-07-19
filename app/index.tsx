@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-} from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth, DEMO_ACCOUNTS } from '@/context/AuthContext';
-import { useToast } from '@/context/ToastContext';
 import InlineError from '@/components/ui/InlineError';
 import { Colors } from '@/constants/Colors';
+import { DEMO_ACCOUNTS, useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView, Platform,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity,
+  View,
+} from 'react-native';
 
 function validate(email: string, password: string) {
   const errors: { email?: string; password?: string } = {};
@@ -58,7 +62,7 @@ export default function LoginScreen() {
       const success = await login(email.trim(), password);
       if (success) {
         toast.success('Login successful', 'Welcome back!');
-        router.replace('/(auth)/(tabs)/dashboard');
+        router.replace('/(auth)/(tabs)/chat');
       } else {
         toast.error('Login failed', 'Incorrect email or password. Please try again.');
         setErrors({ password: 'Incorrect email or password.' });
@@ -94,7 +98,7 @@ export default function LoginScreen() {
               <Ionicons name="school" size={42} color={Colors.white} />
             </View>
           </View>
-          <Text style={styles.appName}>AcadTrack</Text>
+          <Text style={styles.appName}>Acadocs</Text>
           <Text style={styles.tagline}>Academic Submission{'\n'}& Monitoring System</Text>
           <View style={styles.heroDivider} />
           <Text style={styles.schoolLabel}>School Year 2024 — 2025</Text>

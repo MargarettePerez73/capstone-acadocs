@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { UserRole } from '@/constants/Roles';
+import { authAPI } from '@/services/api';
 
 export interface User {
   id: string;
@@ -20,6 +21,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Demo accounts match the users seeded into the `acadocs_mobile` DB by setup.php.
+// (username / password: acadocs2024)
 export const DEMO_ACCOUNTS: Array<{
   label: string;
   role: string;
@@ -28,61 +31,31 @@ export const DEMO_ACCOUNTS: Array<{
   color: string;
   initials: string;
 }> = [
-  { label: 'Dr. Rosa Bautista', role: 'Principal', email: 'principal@school.edu', password: 'admin123', color: '#800020', initials: 'RB' },
-  { label: 'Mr. Juan Dela Cruz', role: 'Teacher', email: 'teacher@school.edu', password: 'teacher123', color: '#1565C0', initials: 'JD' },
-  { label: 'Ms. Ana Reyes', role: 'ADAS', email: 'adas@school.edu', password: 'adas123', color: '#2E7D32', initials: 'AR' },
-  { label: 'Ms. Liza Cruz', role: 'Secretary', email: 'secretary@school.edu', password: 'secretary123', color: '#6A1B9A', initials: 'LC' },
+  { label: 'Dr. Rosa Bautista', role: 'Principal', email: 'r.bautista@school.edu.ph', password: 'acadocs2024', color: '#800020', initials: 'RB' },
+  { label: 'Juan Santos', role: 'Teacher', email: 'j.santos@school.edu.ph', password: 'acadocs2024', color: '#1565C0', initials: 'JS' },
+  { label: 'Maria Reyes', role: 'ADAS', email: 'm.reyes@school.edu.ph', password: 'acadocs2024', color: '#2E7D32', initials: 'MR' },
+  { label: 'Carmen Dela Cruz', role: 'Secretary', email: 'c.delacruz@school.edu.ph', password: 'acadocs2024', color: '#6A1B9A', initials: 'CC' },
 ];
-
-const MOCK_USERS: Record<string, User & { password: string }> = {
-  'principal@school.edu': {
-    id: '1',
-    name: 'Dr. Rosa Bautista',
-    role: 'principal',
-    email: 'principal@school.edu',
-    password: 'admin123',
-    department: 'School Administration',
-  },
-  'teacher@school.edu': {
-    id: '2',
-    name: 'Mr. Juan Dela Cruz',
-    role: 'teacher',
-    email: 'teacher@school.edu',
-    password: 'teacher123',
-    subject: 'Mathematics',
-    gradeLevel: 'Grade 7',
-    department: 'Junior High School',
-  },
-  'adas@school.edu': {
-    id: '3',
-    name: 'Ms. Ana Reyes',
-    role: 'adas',
-    email: 'adas@school.edu',
-    password: 'adas123',
-    department: 'Academic Affairs',
-  },
-  'secretary@school.edu': {
-    id: '4',
-    name: 'Ms. Liza Cruz',
-    role: 'secretary',
-    email: 'secretary@school.edu',
-    password: 'secretary123',
-    department: 'Administrative Office',
-  },
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    await new Promise(r => setTimeout(r, 600));
-    const record = MOCK_USERS[email.toLowerCase()];
-    if (record && record.password === password) {
-      const { password: _pw, ...userData } = record;
-      setUser(userData);
+    try {
+      const data = await authAPI.login(email.trim(), password);
+      const u = data.user;
+      if (!u || !u.id) return false;
+      setUser({
+        id: String(u.id),
+        name: u.name,
+        role: u.role,
+        email: u.email,
+        department: u.department,
+      });
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
   const logout = () => setUser(null);

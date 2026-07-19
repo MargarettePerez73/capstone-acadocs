@@ -14,7 +14,6 @@ export default function AuthLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="announcements" options={{ presentation: 'modal' }} />
       <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
     </Stack>
   );

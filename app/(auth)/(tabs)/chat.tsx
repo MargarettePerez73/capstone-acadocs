@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
 } from 'react-native';
@@ -11,7 +11,27 @@ import { useAuth } from '@/context/AuthContext';
 import { useDrawer } from '@/context/DrawerContext';
 import { useToast } from '@/context/ToastContext';
 import { Colors } from '@/constants/Colors';
-import { CHAT_MESSAGES, ChatMessage } from '@/data/mockData';
+import { RoleLabels } from '@/constants/Roles';
+import { usersAPI, chatAPI } from '@/services/api';
+
+interface ApiUser {
+  id: number;
+  full_name: string;
+  role: string;
+  email?: string | null;
+  department?: string | null;
+}
+
+interface ApiMessage {
+  id: number;
+  sender_id: number;
+  receiver_id: number | null;
+  group_name: string;
+  message: string;
+  sender_name: string | null;
+  sent_at: string;
+  read_at: string | null;
+}
 
 interface Contact {
   userId: string;
@@ -23,13 +43,14 @@ interface Contact {
   online: boolean;
 }
 
-const ALL_CONTACTS: Contact[] = [
-  { userId: '1', name: 'Dr. Rosa Bautista', role: 'Principal', lastMessage: 'Please use the updated DepEd template.', timestamp: '08:05', unread: 0, online: true },
-  { userId: 't2', name: 'Ms. Carla Bautista', role: 'Teacher — Science', lastMessage: 'May I request an extension?', timestamp: '09:00', unread: 1, online: false },
-  { userId: 't3', name: 'Mr. Rico Santos', role: 'Teacher — English', lastMessage: '', timestamp: '', unread: 0, online: true },
-  { userId: 't4', name: 'Ms. Grace Flores', role: 'Teacher — Filipino', lastMessage: '', timestamp: '', unread: 0, online: false },
-  { userId: '3', name: 'Ms. Ana Reyes', role: 'ADAS', lastMessage: '', timestamp: '', unread: 0, online: true },
-];
+function formatTime(sentAt?: string): string {
+  if (!sentAt) return '';
+  const d = new Date(sentAt.replace(' ', 'T'));
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+const contactKey = (a: string, b: string) => [a, b].sort().join('|');
 
 export default function ChatScreen() {
   const { user } = useAuth();
@@ -37,42 +58,111 @@ export default function ChatScreen() {
   const toast = useToast();
 
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>(CHAT_MESSAGES);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [messages, setMessages] = useState<ApiMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const myId = user?.id ?? '';
 
-  const contacts = ALL_CONTACTS.filter(c => c.userId !== myId);
+  const loadData = useCallback(async () => {
+    try {
+      setError('');
+      const [users, msgs] = await Promise.all([
+        usersAPI.getAll(),
+        chatAPI.getMessages(),
+      ]);
+      const userList = (users as ApiUser[]).filter(u => String(u.id) !== myId);
+      const msgList = msgs as ApiMessage[];
+      setMessages(msgList);
+      setContacts(
+        userList.map(u => {
+          const convo = msgList
+            .filter(m => {
+              const k = contactKey(String(m.sender_id), String(m.receiver_id ?? ''));
+              return k === contactKey(myId, String(u.id));
+            })
+            .sort((a, b) => a.id - b.id);
+          const last = convo[convo.length - 1];
+          const unread = msgList.filter(
+            m => String(m.receiver_id) === myId && String(m.sender_id) === String(u.id) && !m.read_at
+          ).length;
+          return {
+            userId: String(u.id),
+            name: u.full_name,
+            role: RoleLabels[(u.role as keyof typeof RoleLabels)] ?? u.role,
+            lastMessage: last ? last.message : '',
+            timestamp: last ? formatTime(last.sent_at) : '',
+            unread,
+            online: false,
+          };
+        })
+      );
+    } catch (e: any) {
+      setError('Could not load messages. Is the backend running?');
+    } finally {
+      setLoading(false);
+    }
+  }, [myId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const conversationMessages = selectedContact
-    ? messages.filter(
-        m =>
-          (m.senderId === myId && m.receiverId === selectedContact.userId) ||
-          (m.receiverId === myId && m.senderId === selectedContact.userId)
-      )
+    ? messages
+        .filter(m => {
+          const k = contactKey(String(m.sender_id), String(m.receiver_id ?? ''));
+          return k === contactKey(myId, selectedContact.userId);
+        })
+        .sort((a, b) => a.id - b.id)
     : [];
 
   const totalUnread = contacts.reduce((s, c) => s + c.unread, 0);
 
-  const handleSend = (text: string) => {
+  const handleSend = async (text: string) => {
     if (!selectedContact) return;
     setSending(true);
-    const newMsg: ChatMessage = {
-      id: `cm${Date.now()}`,
-      senderId: myId,
-      senderName: user?.name ?? '',
-      receiverId: selectedContact.userId,
-      receiverName: selectedContact.name,
-      message: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      read: false,
-    };
-    setTimeout(() => {
+    try {
+      const res = await chatAPI.sendMessage({
+        sender_id: myId,
+        receiver_id: selectedContact.userId,
+        group_name: 'all',
+        message: text,
+        sender_name: user?.name ?? '',
+      });
+      const newMsg: ApiMessage = {
+        id: Number(res.id ?? Date.now()),
+        sender_id: Number(myId),
+        receiver_id: Number(selectedContact.userId),
+        group_name: 'all',
+        message: text,
+        sender_name: user?.name ?? '',
+        sent_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        read_at: null,
+      };
       setMessages(prev => [...prev, newMsg]);
-      setSending(false);
+      setContacts(prev =>
+        prev.map(c =>
+          c.userId === selectedContact.userId
+            ? { ...c, lastMessage: text, timestamp: formatTime(newMsg.sent_at) }
+            : c
+        )
+      );
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-    }, 350);
+    } catch {
+      toast.error('Send failed', 'Your message could not be saved.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const markRead = async (contactId: string) => {
+    messages
+      .filter(m => String(m.receiver_id) === myId && String(m.sender_id) === contactId && !m.read_at)
+      .forEach(m => chatAPI.markAsRead(m.id).catch(() => {}));
   };
 
   const getInitials = (name: string) =>
@@ -86,15 +176,16 @@ export default function ChatScreen() {
           title={selectedContact.name}
           subtitle={selectedContact.role}
           showBack
-          onBack={() => setSelectedContact(null)}
+          onBack={() => {
+            markRead(selectedContact.userId);
+            setSelectedContact(null);
+            loadData();
+          }}
         />
 
-        {/* Online Status Bar */}
-        <View style={[styles.statusBar, { backgroundColor: selectedContact.online ? '#E8F5E9' : Colors.background }]}>
-          <View style={[styles.statusDot, { backgroundColor: selectedContact.online ? Colors.status.submitted : Colors.text.muted }]} />
-          <Text style={[styles.statusText, { color: selectedContact.online ? Colors.status.submitted : Colors.text.muted }]}>
-            {selectedContact.online ? 'Online now' : 'Offline'}
-          </Text>
+        <View style={[styles.statusBar, { backgroundColor: Colors.background }]}>
+          <View style={[styles.statusDot, { backgroundColor: Colors.text.muted }]} />
+          <Text style={[styles.statusText, { color: Colors.text.muted }]}>Offline</Text>
         </View>
 
         <ScrollView
@@ -114,9 +205,9 @@ export default function ChatScreen() {
             <ChatBubble
               key={m.id}
               message={m.message}
-              senderName={m.senderName}
-              timestamp={m.timestamp}
-              isMine={m.senderId === myId}
+              senderName={m.sender_name ?? ''}
+              timestamp={formatTime(m.sent_at)}
+              isMine={String(m.sender_id) === myId}
             />
           ))}
           {sending && (
@@ -142,7 +233,6 @@ export default function ChatScreen() {
         badge={totalUnread}
       />
 
-      {/* Summary */}
       {totalUnread > 0 && (
         <View style={styles.unreadBanner}>
           <Ionicons name="mail-unread-outline" size={16} color={Colors.maroon.primary} />
@@ -152,64 +242,70 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <FlatList
-        data={contacts}
-        keyExtractor={i => i.userId}
-        contentContainerStyle={styles.contactList}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon="people-outline"
-            title="No contacts available"
-            subtitle="There are no other users to message at this time."
-          />
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.contactRow}
-            onPress={() => setSelectedContact(item)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.avatarWrap}>
-              <View style={[styles.avatar, item.unread > 0 && styles.avatarUnread]}>
-                <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.maroon.primary} />
+      ) : error ? (
+        <EmptyState icon="cloud-offline-outline" title="Unable to load chat" subtitle={error} actionLabel="Retry" onAction={loadData} />
+      ) : (
+        <FlatList
+          data={contacts}
+          keyExtractor={i => i.userId}
+          contentContainerStyle={styles.contactList}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="people-outline"
+              title="No contacts available"
+              subtitle="There are no other users to message at this time."
+            />
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.contactRow}
+              onPress={() => setSelectedContact(item)}
+              activeOpacity={0.75}
+            >
+              <View style={styles.avatarWrap}>
+                <View style={[styles.avatar, item.unread > 0 && styles.avatarUnread]}>
+                  <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+                </View>
+                <View style={[styles.onlineDot, { backgroundColor: Colors.border }]} />
               </View>
-              <View style={[styles.onlineDot, { backgroundColor: item.online ? Colors.status.submitted : Colors.border }]} />
-            </View>
-            <View style={styles.contactInfo}>
-              <View style={styles.contactTopRow}>
-                <Text style={[styles.contactName, item.unread > 0 && styles.contactNameBold]}>
-                  {item.name}
-                </Text>
-                {item.timestamp ? (
-                  <Text style={[styles.contactTime, item.unread > 0 && styles.contactTimeUnread]}>
-                    {item.timestamp}
+              <View style={styles.contactInfo}>
+                <View style={styles.contactTopRow}>
+                  <Text style={[styles.contactName, item.unread > 0 && styles.contactNameBold]}>
+                    {item.name}
                   </Text>
-                ) : null}
+                  {item.timestamp ? (
+                    <Text style={[styles.contactTime, item.unread > 0 && styles.contactTimeUnread]}>
+                      {item.timestamp}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.contactBottomRow}>
+                  <Text style={[styles.contactRole]}>{item.role}</Text>
+                </View>
+                {item.lastMessage ? (
+                  <Text
+                    style={[styles.contactPreview, item.unread > 0 && styles.contactPreviewUnread]}
+                    numberOfLines={1}
+                  >
+                    {item.lastMessage}
+                  </Text>
+                ) : (
+                  <Text style={styles.contactNoMessage}>No messages yet — tap to start</Text>
+                )}
               </View>
-              <View style={styles.contactBottomRow}>
-                <Text style={[styles.contactRole]}>{item.role}</Text>
-              </View>
-              {item.lastMessage ? (
-                <Text
-                  style={[styles.contactPreview, item.unread > 0 && styles.contactPreviewUnread]}
-                  numberOfLines={1}
-                >
-                  {item.lastMessage}
-                </Text>
-              ) : (
-                <Text style={styles.contactNoMessage}>No messages yet — tap to start</Text>
+              {item.unread > 0 && (
+                <View style={styles.unreadPill}>
+                  <Text style={styles.unreadPillText}>{item.unread}</Text>
+                </View>
               )}
-            </View>
-            {item.unread > 0 && (
-              <View style={styles.unreadPill}>
-                <Text style={styles.unreadPillText}>{item.unread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-      />
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </View>
   );
 }

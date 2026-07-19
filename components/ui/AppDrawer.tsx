@@ -18,16 +18,11 @@ interface NavItem {
   subtitle: string;
   route: string;
   icon: keyof typeof Ionicons.glyphMap;
-  roles?: string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', subtitle: 'Overview & key metrics', route: '/(auth)/(tabs)/dashboard', icon: 'grid-outline' },
-  { label: 'Submissions', subtitle: 'DLL, lesson plans & documents', route: '/(auth)/(tabs)/submissions', icon: 'document-text-outline' },
-  { label: 'MPS', subtitle: 'Mean percentage scores', route: '/(auth)/(tabs)/mps', icon: 'bar-chart-outline' },
-  { label: 'Reports', subtitle: 'Generate & export reports', route: '/(auth)/(tabs)/reports', icon: 'download-outline', roles: ['principal', 'adas', 'secretary'] },
   { label: 'Chat', subtitle: 'Messages & correspondence', route: '/(auth)/(tabs)/chat', icon: 'chatbubbles-outline' },
-  { label: 'Announcements', subtitle: 'Notices & quick links', route: '/(auth)/announcements', icon: 'megaphone-outline' },
+  { label: 'Documents', subtitle: 'View & download documents', route: '/(auth)/(tabs)/documents', icon: 'document-text-outline' },
 ];
 
 export default function AppDrawer() {
@@ -67,10 +62,6 @@ export default function AppDrawer() {
   const getInitials = (name: string) =>
     name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
-  const visibleItems = NAV_ITEMS.filter(item =>
-    !item.roles || (user?.role && item.roles.includes(user.role))
-  );
-
   if (!isOpen) return null;
 
   return (
@@ -101,7 +92,7 @@ export default function AppDrawer() {
         {/* Nav Items */}
         <ScrollView style={styles.navList} showsVerticalScrollIndicator={false}>
           <Text style={styles.navSection}>Navigation</Text>
-          {visibleItems.map(item => {
+          {NAV_ITEMS.map(item => {
             const isActive = pathname.includes(item.route.replace('/(auth)', '').replace('/(tabs)', ''));
             return (
               <TouchableOpacity
@@ -142,7 +133,7 @@ export default function AppDrawer() {
             <Ionicons name="log-out-outline" size={20} color={Colors.status.missing} />
             <Text style={styles.logoutText}>Sign Out</Text>
           </View>
-          <Text style={styles.logoutSub}>AcadTrack v1.0</Text>
+          <Text style={styles.logoutSub}>Acadocs v1.0</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
