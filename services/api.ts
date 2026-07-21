@@ -37,22 +37,33 @@ export const documentLinksAPI = {
 };
 
 // ============================================================
-// CHAT API
+// CHAT API — conversations (direct + group) & messages
 // ============================================================
 
 export const chatAPI = {
-  getMessages: async (filters?: { sender_id?: number; receiver_id?: number; group_name?: string }) => {
-    const response = await api.get('/chat', { params: filters });
+  getConversations: async (userId: number | string) => {
+    const response = await api.get('/conversations', { params: { user_id: userId } });
     return response.data;
   },
 
-  sendMessage: async (data: any) => {
-    const response = await api.post('/chat', data);
+  // Direct-conversation creation is admin-only server-side.
+  startConversation: async (createdBy: number | string, userId: number | string) => {
+    const response = await api.post('/conversations', { created_by: createdBy, user_id: userId });
     return response.data;
   },
 
-  markAsRead: async (id: number) => {
-    const response = await api.put(`/chat/${id}/read`);
+  getMessages: async (conversationId: number | string) => {
+    const response = await api.get(`/conversations/${conversationId}/messages`);
+    return response.data;
+  },
+
+  sendMessage: async (conversationId: number | string, senderId: number | string, body: string) => {
+    const response = await api.post(`/conversations/${conversationId}/messages`, { sender_id: senderId, body });
+    return response.data;
+  },
+
+  markAsRead: async (conversationId: number | string, userId: number | string) => {
+    const response = await api.put(`/conversations/${conversationId}/read`, { user_id: userId });
     return response.data;
   },
 };

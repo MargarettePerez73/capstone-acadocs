@@ -1,6 +1,6 @@
 import InlineError from '@/components/ui/InlineError';
 import { Colors } from '@/constants/Colors';
-import { DEMO_ACCOUNTS, useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -36,7 +36,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
 
@@ -73,15 +72,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillCredentials = (acc: typeof DEMO_ACCOUNTS[0]) => {
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setErrors({});
-    setTouched({});
-    setShowDemo(false);
-    toast.info('Credentials loaded', `Ready to sign in as ${acc.role}.`);
   };
 
   const emailError = touched.email ? errors.email : undefined;
@@ -187,41 +177,6 @@ export default function LoginScreen() {
               </View>
             )}
           </TouchableOpacity>
-
-          {/* Demo Credentials */}
-          <TouchableOpacity style={styles.demoToggle} onPress={() => setShowDemo(v => !v)} disabled={loading}>
-            <Ionicons name="information-circle-outline" size={15} color={Colors.maroon.primary} />
-            <Text style={styles.demoToggleText}>
-              {showDemo ? 'Hide' : 'View'} demo accounts
-            </Text>
-            <Ionicons name={showDemo ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.maroon.primary} />
-          </TouchableOpacity>
-
-          {showDemo && (
-            <View style={styles.demoGrid}>
-              <Text style={styles.demoGridTitle}>Tap a role to fill credentials</Text>
-              {DEMO_ACCOUNTS.map(acc => (
-                <TouchableOpacity
-                  key={acc.email}
-                  style={styles.demoCard}
-                  onPress={() => fillCredentials(acc)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.demoAvatar, { backgroundColor: acc.color }]}>
-                    <Text style={styles.demoAvatarText}>{acc.initials}</Text>
-                  </View>
-                  <View style={styles.demoCardInfo}>
-                    <Text style={styles.demoCardName}>{acc.label}</Text>
-                    <Text style={styles.demoCardRole}>{acc.role}</Text>
-                    <Text style={styles.demoCardEmail}>{acc.email}</Text>
-                  </View>
-                  <View style={[styles.demoBadge, { backgroundColor: acc.color + '18' }]}>
-                    <Text style={[styles.demoBadgeText, { color: acc.color }]}>{acc.password}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
         </View>
 
         {/* ── Footer ── */}
@@ -323,54 +278,6 @@ const styles = StyleSheet.create({
   loginBtnLoading: { opacity: 0.8 },
   loginBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
-
-  demoToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  demoToggleText: { fontSize: 13, color: Colors.maroon.primary, fontWeight: '600' },
-
-  demoGrid: {
-    marginTop: 10,
-    marginBottom: 8,
-    backgroundColor: Colors.maroon.surface,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  demoGridTitle: {
-    fontSize: 11,
-    color: Colors.text.muted,
-    textAlign: 'center',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    fontWeight: '600',
-  },
-  demoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    padding: 12,
-    gap: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  demoAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  demoAvatarText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
-  demoCardInfo: { flex: 1 },
-  demoCardName: { fontSize: 13, fontWeight: '700', color: Colors.text.primary },
-  demoCardRole: { fontSize: 11, color: Colors.text.secondary, fontWeight: '600', marginTop: 1 },
-  demoCardEmail: { fontSize: 10, color: Colors.text.muted, marginTop: 1 },
-  demoBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
-  demoBadgeText: { fontSize: 11, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
 
   footer: {
     flexDirection: 'row',

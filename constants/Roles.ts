@@ -1,14 +1,15 @@
-export type UserRole = 'principal' | 'teacher' | 'adas' | 'secretary';
+export type UserRole = 'admin' | 'teacher' | 'adas' | 'secretary';
 
 export const Roles = {
-  PRINCIPAL: 'principal' as UserRole,
+  ADMIN: 'admin' as UserRole,
   TEACHER: 'teacher' as UserRole,
   ADAS: 'adas' as UserRole,
   SECRETARY: 'secretary' as UserRole,
 };
 
+// Display labels — the DB role is "admin" but the school calls that person Principal.
 export const RoleLabels: Record<UserRole, string> = {
-  principal: 'Principal',
+  admin: 'Principal',
   teacher: 'Teacher',
   adas: 'ADAS',
   secretary: 'Secretary',

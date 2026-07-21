@@ -81,8 +81,6 @@ export default function AppDrawer() {
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{user?.name ?? 'User'}</Text>
             <Text style={styles.userRole}>{user ? RoleLabels[user.role] : ''}</Text>
-            {user?.subject && <Text style={styles.userDept}>{user.subject} · {user.gradeLevel}</Text>}
-            {user?.department && !user?.subject && <Text style={styles.userDept}>{user.department}</Text>}
           </View>
           <TouchableOpacity style={styles.closeBtn} onPress={closeDrawer}>
             <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />

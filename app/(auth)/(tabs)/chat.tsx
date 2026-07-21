@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Header from '@/components/ui/Header';
 import ChatBubble from '@/components/chat/ChatBubble';
 import ChatInput from '@/components/chat/ChatInput';
@@ -16,141 +16,125 @@ import { usersAPI, chatAPI } from '@/services/api';
 
 interface ApiUser {
   id: number;
-  full_name: string;
+  name: string;
   role: string;
   email?: string | null;
-  department?: string | null;
+}
+
+interface Participant {
+  id: number;
+  name: string;
+  role: string;
+}
+
+interface ApiConversation {
+  id: number;
+  type: 'direct' | 'group';
+  name: string | null;
+  created_by: number;
+  last_read_at: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+  participants: Participant[];
 }
 
 interface ApiMessage {
   id: number;
+  conversation_id: number;
   sender_id: number;
-  receiver_id: number | null;
-  group_name: string;
-  message: string;
-  sender_name: string | null;
-  sent_at: string;
-  read_at: string | null;
+  sender_name: string;
+  body: string;
+  created_at: string;
 }
 
-interface Contact {
-  userId: string;
-  name: string;
-  role: string;
-  lastMessage: string;
-  timestamp: string;
-  unread: number;
-  online: boolean;
-}
-
-function formatTime(sentAt?: string): string {
-  if (!sentAt) return '';
-  const d = new Date(sentAt.replace(' ', 'T'));
+function formatTime(ts?: string | null): string {
+  if (!ts) return '';
+  const d = new Date(ts.replace(' ', 'T'));
   if (isNaN(d.getTime())) return '';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-const contactKey = (a: string, b: string) => [a, b].sort().join('|');
+const getInitials = (name: string) =>
+  name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
 export default function ChatScreen() {
   const { user } = useAuth();
   const { toggleDrawer } = useDrawer();
   const toast = useToast();
 
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selected, setSelected] = useState<ApiConversation | null>(null);
+  const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [messages, setMessages] = useState<ApiMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [allUsers, setAllUsers] = useState<ApiUser[]>([]);
+  const [creating, setCreating] = useState(false);
+
   const scrollRef = useRef<ScrollView>(null);
-
   const myId = user?.id ?? '';
+  const isAdmin = user?.role === 'admin';
 
-  const loadData = useCallback(async () => {
+  const loadConversations = useCallback(async () => {
     try {
       setError('');
-      const [users, msgs] = await Promise.all([
-        usersAPI.getAll(),
-        chatAPI.getMessages(),
-      ]);
-      const userList = (users as ApiUser[]).filter(u => String(u.id) !== myId);
-      const msgList = msgs as ApiMessage[];
-      setMessages(msgList);
-      setContacts(
-        userList.map(u => {
-          const convo = msgList
-            .filter(m => {
-              const k = contactKey(String(m.sender_id), String(m.receiver_id ?? ''));
-              return k === contactKey(myId, String(u.id));
-            })
-            .sort((a, b) => a.id - b.id);
-          const last = convo[convo.length - 1];
-          const unread = msgList.filter(
-            m => String(m.receiver_id) === myId && String(m.sender_id) === String(u.id) && !m.read_at
-          ).length;
-          return {
-            userId: String(u.id),
-            name: u.full_name,
-            role: RoleLabels[(u.role as keyof typeof RoleLabels)] ?? u.role,
-            lastMessage: last ? last.message : '',
-            timestamp: last ? formatTime(last.sent_at) : '',
-            unread,
-            online: false,
-          };
-        })
-      );
-    } catch (e: any) {
-      setError('Could not load messages. Is the backend running?');
+      const convos = await chatAPI.getConversations(myId);
+      setConversations(convos as ApiConversation[]);
+    } catch {
+      setError('Could not load conversations. Is the backend running?');
     } finally {
       setLoading(false);
     }
   }, [myId]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  const conversationMessages = selectedContact
-    ? messages
-        .filter(m => {
-          const k = contactKey(String(m.sender_id), String(m.receiver_id ?? ''));
-          return k === contactKey(myId, selectedContact.userId);
-        })
-        .sort((a, b) => a.id - b.id)
-    : [];
+  const loadMessages = async (conversationId: number) => {
+    setMessagesLoading(true);
+    try {
+      const msgs = await chatAPI.getMessages(conversationId);
+      setMessages(msgs as ApiMessage[]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 60);
+    } catch {
+      toast.error('Could not load messages', 'Please try again.');
+    } finally {
+      setMessagesLoading(false);
+    }
+  };
 
-  const totalUnread = contacts.reduce((s, c) => s + c.unread, 0);
+  const openConversation = (conv: ApiConversation) => {
+    setSelected(conv);
+    loadMessages(conv.id);
+  };
+
+  const closeConversation = () => {
+    if (selected) {
+      chatAPI.markAsRead(selected.id, myId).catch(() => {});
+    }
+    setSelected(null);
+    loadConversations();
+  };
+
+  const totalUnread = conversations.reduce((s, c) => s + (c.unread_count || 0), 0);
 
   const handleSend = async (text: string) => {
-    if (!selectedContact) return;
+    if (!selected) return;
     setSending(true);
     try {
-      const res = await chatAPI.sendMessage({
-        sender_id: myId,
-        receiver_id: selectedContact.userId,
-        group_name: 'all',
-        message: text,
-        sender_name: user?.name ?? '',
-      });
+      const res = await chatAPI.sendMessage(selected.id, myId, text);
       const newMsg: ApiMessage = {
         id: Number(res.id ?? Date.now()),
+        conversation_id: selected.id,
         sender_id: Number(myId),
-        receiver_id: Number(selectedContact.userId),
-        group_name: 'all',
-        message: text,
         sender_name: user?.name ?? '',
-        sent_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        read_at: null,
+        body: text,
+        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
       };
       setMessages(prev => [...prev, newMsg]);
-      setContacts(prev =>
-        prev.map(c =>
-          c.userId === selectedContact.userId
-            ? { ...c, lastMessage: text, timestamp: formatTime(newMsg.sent_at) }
-            : c
-        )
-      );
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     } catch {
       toast.error('Send failed', 'Your message could not be saved.');
@@ -159,34 +143,54 @@ export default function ChatScreen() {
     }
   };
 
-  const markRead = async (contactId: string) => {
-    messages
-      .filter(m => String(m.receiver_id) === myId && String(m.sender_id) === contactId && !m.read_at)
-      .forEach(m => chatAPI.markAsRead(m.id).catch(() => {}));
+  const openNewChat = async () => {
+    setShowNewChat(true);
+    try {
+      const users = await usersAPI.getAll();
+      setAllUsers((users as ApiUser[]).filter(u => String(u.id) !== myId));
+    } catch {
+      toast.error('Could not load users', 'Please try again.');
+    }
   };
 
-  const getInitials = (name: string) =>
-    name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const handleStartChat = async (target: ApiUser) => {
+    setCreating(true);
+    try {
+      const res = await chatAPI.startConversation(myId, target.id);
+      setShowNewChat(false);
+      await loadConversations();
+      openConversation({
+        id: res.id,
+        type: 'direct',
+        name: target.name,
+        created_by: Number(myId),
+        last_read_at: null,
+        last_message: null,
+        last_message_at: null,
+        unread_count: 0,
+        participants: [{ id: target.id, name: target.name, role: target.role }],
+      });
+    } catch {
+      toast.error('Could not start conversation', 'Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   /* ── Conversation View ── */
-  if (selectedContact) {
+  if (selected) {
+    const subtitle = selected.type === 'group'
+      ? `${selected.participants.length + 1} members`
+      : (RoleLabels[(selected.participants[0]?.role as keyof typeof RoleLabels)] ?? selected.participants[0]?.role ?? '');
+
     return (
       <View style={styles.flex}>
         <Header
-          title={selectedContact.name}
-          subtitle={selectedContact.role}
+          title={selected.name ?? 'Conversation'}
+          subtitle={subtitle}
           showBack
-          onBack={() => {
-            markRead(selectedContact.userId);
-            setSelectedContact(null);
-            loadData();
-          }}
+          onBack={closeConversation}
         />
-
-        <View style={[styles.statusBar, { backgroundColor: Colors.background }]}>
-          <View style={[styles.statusDot, { backgroundColor: Colors.text.muted }]} />
-          <Text style={[styles.statusText, { color: Colors.text.muted }]}>Offline</Text>
-        </View>
 
         <ScrollView
           ref={scrollRef}
@@ -194,22 +198,25 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
-          {conversationMessages.length === 0 && (
+          {messagesLoading ? (
+            <ActivityIndicator style={{ marginTop: 24 }} color={Colors.maroon.primary} />
+          ) : messages.length === 0 ? (
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title="No messages yet"
-              subtitle={`Start a conversation with ${selectedContact.name.split(' ')[0]}.`}
+              subtitle={`Start the conversation with ${selected.name?.split(' ')[0] ?? 'this group'}.`}
             />
+          ) : (
+            messages.map(m => (
+              <ChatBubble
+                key={m.id}
+                message={m.body}
+                senderName={m.sender_name}
+                timestamp={formatTime(m.created_at)}
+                isMine={String(m.sender_id) === myId}
+              />
+            ))
           )}
-          {conversationMessages.map(m => (
-            <ChatBubble
-              key={m.id}
-              message={m.message}
-              senderName={m.sender_name ?? ''}
-              timestamp={formatTime(m.sent_at)}
-              isMine={String(m.sender_id) === myId}
-            />
-          ))}
           {sending && (
             <View style={styles.sendingIndicator}>
               <ActivityIndicator size="small" color={Colors.maroon.primary} />
@@ -222,7 +229,7 @@ export default function ChatScreen() {
     );
   }
 
-  /* ── Contact List View ── */
+  /* ── Conversation List View ── */
   return (
     <View style={styles.flex}>
       <Header
@@ -231,6 +238,8 @@ export default function ChatScreen() {
         showMenu
         onMenuPress={toggleDrawer}
         badge={totalUnread}
+        rightIcon={isAdmin ? 'person-add-outline' : undefined}
+        onRightPress={isAdmin ? openNewChat : undefined}
       />
 
       {totalUnread > 0 && (
@@ -245,67 +254,110 @@ export default function ChatScreen() {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.maroon.primary} />
       ) : error ? (
-        <EmptyState icon="cloud-offline-outline" title="Unable to load chat" subtitle={error} actionLabel="Retry" onAction={loadData} />
+        <EmptyState icon="cloud-offline-outline" title="Unable to load chat" subtitle={error} actionLabel="Retry" onAction={loadConversations} />
       ) : (
         <FlatList
-          data={contacts}
-          keyExtractor={i => i.userId}
+          data={conversations}
+          keyExtractor={i => String(i.id)}
           contentContainerStyle={styles.contactList}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
-              title="No contacts available"
-              subtitle="There are no other users to message at this time."
+              title="No conversations yet"
+              subtitle={isAdmin ? 'Tap the + icon to start a conversation.' : 'Conversations started by the principal will appear here.'}
+              actionLabel={isAdmin ? 'Start a conversation' : undefined}
+              onAction={isAdmin ? openNewChat : undefined}
             />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.contactRow}
-              onPress={() => setSelectedContact(item)}
+              onPress={() => openConversation(item)}
               activeOpacity={0.75}
             >
               <View style={styles.avatarWrap}>
-                <View style={[styles.avatar, item.unread > 0 && styles.avatarUnread]}>
-                  <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+                <View style={[styles.avatar, item.unread_count > 0 && styles.avatarUnread]}>
+                  {item.type === 'group' ? (
+                    <MaterialCommunityIcons name="account-group" size={20} color={Colors.white} />
+                  ) : (
+                    <Text style={styles.avatarText}>{getInitials(item.name ?? '?')}</Text>
+                  )}
                 </View>
-                <View style={[styles.onlineDot, { backgroundColor: Colors.border }]} />
               </View>
               <View style={styles.contactInfo}>
                 <View style={styles.contactTopRow}>
-                  <Text style={[styles.contactName, item.unread > 0 && styles.contactNameBold]}>
+                  <Text style={[styles.contactName, item.unread_count > 0 && styles.contactNameBold]} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  {item.timestamp ? (
-                    <Text style={[styles.contactTime, item.unread > 0 && styles.contactTimeUnread]}>
-                      {item.timestamp}
+                  {item.last_message_at ? (
+                    <Text style={[styles.contactTime, item.unread_count > 0 && styles.contactTimeUnread]}>
+                      {formatTime(item.last_message_at)}
                     </Text>
                   ) : null}
                 </View>
                 <View style={styles.contactBottomRow}>
-                  <Text style={[styles.contactRole]}>{item.role}</Text>
+                  <Text style={styles.contactRole}>{item.type === 'group' ? 'Group' : 'Direct message'}</Text>
                 </View>
-                {item.lastMessage ? (
+                {item.last_message ? (
                   <Text
-                    style={[styles.contactPreview, item.unread > 0 && styles.contactPreviewUnread]}
+                    style={[styles.contactPreview, item.unread_count > 0 && styles.contactPreviewUnread]}
                     numberOfLines={1}
                   >
-                    {item.lastMessage}
+                    {item.last_message}
                   </Text>
                 ) : (
                   <Text style={styles.contactNoMessage}>No messages yet — tap to start</Text>
                 )}
               </View>
-              {item.unread > 0 && (
+              {item.unread_count > 0 && (
                 <View style={styles.unreadPill}>
-                  <Text style={styles.unreadPillText}>{item.unread}</Text>
+                  <Text style={styles.unreadPillText}>{item.unread_count}</Text>
                 </View>
               )}
             </TouchableOpacity>
           )}
         />
       )}
+
+      {/* New Conversation Modal (admin only) */}
+      <Modal visible={showNewChat} animationType="slide" transparent onRequestClose={() => setShowNewChat(false)}>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Start a Conversation</Text>
+              <TouchableOpacity onPress={() => setShowNewChat(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={22} color={Colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            {creating ? (
+              <ActivityIndicator style={{ marginVertical: 24 }} color={Colors.maroon.primary} />
+            ) : (
+              <FlatList
+                data={allUsers}
+                keyExtractor={u => String(u.id)}
+                style={{ maxHeight: 380 }}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                ListEmptyComponent={<ActivityIndicator style={{ marginVertical: 24 }} color={Colors.maroon.primary} />}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.userRow} onPress={() => handleStartChat(item)} activeOpacity={0.75}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.contactName}>{item.name}</Text>
+                      <Text style={styles.contactRole}>
+                        {RoleLabels[(item.role as keyof typeof RoleLabels)] ?? item.role}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -313,7 +365,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
 
-  /* Contact List */
+  /* Conversation List */
   unreadBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -344,16 +396,6 @@ const styles = StyleSheet.create({
   },
   avatarUnread: { backgroundColor: Colors.maroon.dark },
   avatarText: { fontSize: 17, fontWeight: '800', color: Colors.white },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 1,
-    right: 1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.white,
-  },
   contactInfo: { flex: 1, minWidth: 0 },
   contactTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   contactName: { fontSize: 15, fontWeight: '600', color: Colors.text.primary, flex: 1, marginRight: 8 },
@@ -376,17 +418,6 @@ const styles = StyleSheet.create({
   unreadPillText: { color: Colors.white, fontSize: 11, fontWeight: '800' },
 
   /* Conversation */
-  statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 12, fontWeight: '600' },
   messageList: { padding: 16, paddingBottom: 16, flexGrow: 1 },
   sendingIndicator: {
     flexDirection: 'row',
@@ -402,4 +433,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sendingText: { fontSize: 12, color: Colors.text.muted },
+
+  /* New Chat Modal */
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: Colors.text.primary },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
 });

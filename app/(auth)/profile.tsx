@@ -37,8 +37,6 @@ export default function ProfileScreen() {
             { icon: 'person-outline', label: 'Full Name', value: user?.name },
             { icon: 'mail-outline', label: 'Email', value: user?.email },
             { icon: 'shield-outline', label: 'Role', value: user ? RoleLabels[user.role] : '' },
-            user?.subject && { icon: 'book-outline', label: 'Subject', value: user.subject },
-            user?.gradeLevel && { icon: 'school-outline', label: 'Grade Level', value: user.gradeLevel },
           ].filter(Boolean).map((item: any) => (
             <View key={item.label} style={styles.detailRow}>
               <Ionicons name={item.icon as any} size={18} color={Colors.maroon.primary} />
