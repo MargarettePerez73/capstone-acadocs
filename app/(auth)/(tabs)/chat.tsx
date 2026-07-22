@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Header from '@/components/ui/Header';
 import ChatBubble from '@/components/chat/ChatBubble';
@@ -10,7 +11,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import { useAuth } from '@/context/AuthContext';
 import { useDrawer } from '@/context/DrawerContext';
 import { useToast } from '@/context/ToastContext';
-import { Colors } from '@/constants/Colors';
+import { ColorPalette } from '@/constants/Colors';
+import { useThemeColors } from '@/context/ThemeContext';
 import { RoleLabels } from '@/constants/Roles';
 import { usersAPI, chatAPI } from '@/services/api';
 
@@ -19,18 +21,21 @@ interface ApiUser {
   name: string;
   role: string;
   email?: string | null;
+  photo?: string | null;
 }
 
 interface Participant {
   id: number;
   name: string;
   role: string;
+  photo?: string | null;
 }
 
 interface ApiConversation {
   id: number;
   type: 'direct' | 'group';
   name: string | null;
+  photo: string | null;
   created_by: number;
   last_read_at: string | null;
   last_message: string | null;
@@ -62,6 +67,8 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const { toggleDrawer } = useDrawer();
   const toast = useToast();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [selected, setSelected] = useState<ApiConversation | null>(null);
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
@@ -80,6 +87,10 @@ export default function ChatScreen() {
   const isAdmin = user?.role === 'admin';
 
   const loadConversations = useCallback(async () => {
+    if (!myId) {
+      setLoading(false);
+      return;
+    }
     try {
       setError('');
       const convos = await chatAPI.getConversations(myId);
@@ -163,12 +174,13 @@ export default function ChatScreen() {
         id: res.id,
         type: 'direct',
         name: target.name,
+        photo: target.photo ?? null,
         created_by: Number(myId),
         last_read_at: null,
         last_message: null,
         last_message_at: null,
         unread_count: 0,
-        participants: [{ id: target.id, name: target.name, role: target.role }],
+        participants: [{ id: target.id, name: target.name, role: target.role, photo: target.photo }],
       });
     } catch {
       toast.error('Could not start conversation', 'Please try again.');
@@ -199,7 +211,7 @@ export default function ChatScreen() {
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {messagesLoading ? (
-            <ActivityIndicator style={{ marginTop: 24 }} color={Colors.maroon.primary} />
+            <ActivityIndicator style={{ marginTop: 24 }} color={colors.maroon.primary} />
           ) : messages.length === 0 ? (
             <EmptyState
               icon="chatbubble-ellipses-outline"
@@ -219,7 +231,7 @@ export default function ChatScreen() {
           )}
           {sending && (
             <View style={styles.sendingIndicator}>
-              <ActivityIndicator size="small" color={Colors.maroon.primary} />
+              <ActivityIndicator size="small" color={colors.maroon.primary} />
               <Text style={styles.sendingText}>Sending...</Text>
             </View>
           )}
@@ -244,7 +256,7 @@ export default function ChatScreen() {
 
       {totalUnread > 0 && (
         <View style={styles.unreadBanner}>
-          <Ionicons name="mail-unread-outline" size={16} color={Colors.maroon.primary} />
+          <Ionicons name="mail-unread-outline" size={16} color={colors.maroon.primary} />
           <Text style={styles.unreadBannerText}>
             You have {totalUnread} unread message{totalUnread !== 1 ? 's' : ''}.
           </Text>
@@ -252,7 +264,7 @@ export default function ChatScreen() {
       )}
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.maroon.primary} />
+        <ActivityIndicator style={{ marginTop: 40 }} color={colors.maroon.primary} />
       ) : error ? (
         <EmptyState icon="cloud-offline-outline" title="Unable to load chat" subtitle={error} actionLabel="Retry" onAction={loadConversations} />
       ) : (
@@ -278,13 +290,17 @@ export default function ChatScreen() {
               activeOpacity={0.75}
             >
               <View style={styles.avatarWrap}>
-                <View style={[styles.avatar, item.unread_count > 0 && styles.avatarUnread]}>
-                  {item.type === 'group' ? (
-                    <MaterialCommunityIcons name="account-group" size={20} color={Colors.white} />
-                  ) : (
-                    <Text style={styles.avatarText}>{getInitials(item.name ?? '?')}</Text>
-                  )}
-                </View>
+                {item.type === 'direct' && item.photo ? (
+                  <Image source={{ uri: usersAPI.avatarUrl(item.photo)! }} style={styles.avatarImage} contentFit="cover" />
+                ) : (
+                  <View style={[styles.avatar, item.unread_count > 0 && styles.avatarUnread]}>
+                    {item.type === 'group' ? (
+                      <MaterialCommunityIcons name="account-group" size={20} color={colors.white} />
+                    ) : (
+                      <Text style={styles.avatarText}>{getInitials(item.name ?? '?')}</Text>
+                    )}
+                  </View>
+                )}
               </View>
               <View style={styles.contactInfo}>
                 <View style={styles.contactTopRow}>
@@ -328,23 +344,27 @@ export default function ChatScreen() {
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Start a Conversation</Text>
               <TouchableOpacity onPress={() => setShowNewChat(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={22} color={Colors.text.primary} />
+                <Ionicons name="close" size={22} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
             {creating ? (
-              <ActivityIndicator style={{ marginVertical: 24 }} color={Colors.maroon.primary} />
+              <ActivityIndicator style={{ marginVertical: 24 }} color={colors.maroon.primary} />
             ) : (
               <FlatList
                 data={allUsers}
                 keyExtractor={u => String(u.id)}
                 style={{ maxHeight: 380 }}
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
-                ListEmptyComponent={<ActivityIndicator style={{ marginVertical: 24 }} color={Colors.maroon.primary} />}
+                ListEmptyComponent={<ActivityIndicator style={{ marginVertical: 24 }} color={colors.maroon.primary} />}
                 renderItem={({ item }) => (
                   <TouchableOpacity style={styles.userRow} onPress={() => handleStartChat(item)} activeOpacity={0.75}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
-                    </View>
+                    {item.photo ? (
+                      <Image source={{ uri: usersAPI.avatarUrl(item.photo)! }} style={styles.avatarImage} contentFit="cover" />
+                    ) : (
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+                      </View>
+                    )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.contactName}>{item.name}</Text>
                       <Text style={styles.contactRole}>
@@ -362,88 +382,91 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: Colors.background },
+function createStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: colors.background },
 
-  /* Conversation List */
-  unreadBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.maroon.muted,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  unreadBannerText: { fontSize: 13, color: Colors.maroon.primary, fontWeight: '600' },
-  contactList: { paddingBottom: 24 },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  separator: { height: 1, backgroundColor: Colors.border, marginLeft: 78 },
-  avatarWrap: { position: 'relative' },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.maroon.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarUnread: { backgroundColor: Colors.maroon.dark },
-  avatarText: { fontSize: 17, fontWeight: '800', color: Colors.white },
-  contactInfo: { flex: 1, minWidth: 0 },
-  contactTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  contactName: { fontSize: 15, fontWeight: '600', color: Colors.text.primary, flex: 1, marginRight: 8 },
-  contactNameBold: { fontWeight: '800' },
-  contactTime: { fontSize: 11, color: Colors.text.muted, flexShrink: 0 },
-  contactTimeUnread: { color: Colors.maroon.primary, fontWeight: '700' },
-  contactBottomRow: { marginBottom: 2 },
-  contactRole: { fontSize: 11, color: Colors.maroon.primary, fontWeight: '600' },
-  contactPreview: { fontSize: 12, color: Colors.text.muted },
-  contactPreviewUnread: { color: Colors.text.primary, fontWeight: '600' },
-  contactNoMessage: { fontSize: 11, color: Colors.text.muted, fontStyle: 'italic' },
-  unreadPill: {
-    backgroundColor: Colors.maroon.primary,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    minWidth: 22,
-    alignItems: 'center',
-  },
-  unreadPillText: { color: Colors.white, fontSize: 11, fontWeight: '800' },
+    /* Conversation List */
+    unreadBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.maroon.muted,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    unreadBannerText: { fontSize: 13, color: colors.maroon.primary, fontWeight: '600' },
+    contactList: { paddingBottom: 24 },
+    contactRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 12,
+    },
+    separator: { height: 1, backgroundColor: colors.border, marginLeft: 78 },
+    avatarWrap: { position: 'relative' },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.maroon.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarUnread: { backgroundColor: colors.maroon.dark },
+    avatarText: { fontSize: 17, fontWeight: '800', color: colors.white },
+    avatarImage: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.maroon.muted },
+    contactInfo: { flex: 1, minWidth: 0 },
+    contactTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+    contactName: { fontSize: 15, fontWeight: '600', color: colors.text.primary, flex: 1, marginRight: 8 },
+    contactNameBold: { fontWeight: '800' },
+    contactTime: { fontSize: 11, color: colors.text.muted, flexShrink: 0 },
+    contactTimeUnread: { color: colors.maroon.primary, fontWeight: '700' },
+    contactBottomRow: { marginBottom: 2 },
+    contactRole: { fontSize: 11, color: colors.maroon.primary, fontWeight: '600' },
+    contactPreview: { fontSize: 12, color: colors.text.muted },
+    contactPreviewUnread: { color: colors.text.primary, fontWeight: '600' },
+    contactNoMessage: { fontSize: 11, color: colors.text.muted, fontStyle: 'italic' },
+    unreadPill: {
+      backgroundColor: colors.maroon.primary,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      minWidth: 22,
+      alignItems: 'center',
+    },
+    unreadPillText: { color: colors.white, fontSize: 11, fontWeight: '800' },
 
-  /* Conversation */
-  messageList: { padding: 16, paddingBottom: 16, flexGrow: 1 },
-  sendingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: 4,
-  },
-  sendingText: { fontSize: 12, color: Colors.text.muted },
+    /* Conversation */
+    messageList: { padding: 16, paddingBottom: 16, flexGrow: 1 },
+    sendingIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-end',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginTop: 4,
+    },
+    sendingText: { fontSize: 12, color: colors.text.muted },
 
-  /* New Chat Modal */
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 24,
-    paddingBottom: 36,
-  },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  sheetTitle: { fontSize: 18, fontWeight: '800', color: Colors.text.primary },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-});
+    /* New Chat Modal */
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      padding: 24,
+      paddingBottom: 36,
+    },
+    sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+    sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.text.primary },
+    userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  });
+}

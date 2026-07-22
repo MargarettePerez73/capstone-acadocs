@@ -14,6 +14,7 @@ interface AuthContextValue {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  updateUser: (patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => void;
   isAuthenticated: boolean;
 }
 
@@ -42,8 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => setUser(null);
 
+  const updateUser = (patch: Partial<Pick<User, 'name' | 'email' | 'photo'>>) => {
+    setUser(prev => (prev ? { ...prev, ...patch } : prev));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

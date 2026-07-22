@@ -3,7 +3,6 @@ import React, {
 } from 'react';
 import { Animated, View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/constants/Colors';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 

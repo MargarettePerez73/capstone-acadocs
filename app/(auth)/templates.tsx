@@ -1,60 +1,59 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Linking, ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Linking, ActivityIndicator } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import Header from '@/components/ui/Header';
 import Card from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
-import { useDrawer } from '@/context/DrawerContext';
 import { useToast } from '@/context/ToastContext';
 import { ColorPalette } from '@/constants/Colors';
 import { useThemeColors } from '@/context/ThemeContext';
-import { documentLinksAPI } from '@/services/api';
+import { templatesAPI } from '@/services/api';
 
-interface DocumentLink {
-  id: string;
-  title: string;
-  url: string;
-  category: string;
-  description: string | null;
-}
-
-interface ApiLink {
+interface TemplateCategory {
   id: number;
-  title: string;
-  url: string;
-  category: string | null;
-  description: string | null;
+  name: string;
 }
 
-export default function DocumentsScreen() {
-  const { toggleDrawer } = useDrawer();
+interface Template {
+  id: number;
+  category_id: number;
+  category_name: string;
+  title: string;
+  description: string | null;
+  file_name: string;
+  file_ext: string;
+  file_size: number;
+  uploaded_by: string;
+  date_added: string;
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function TemplatesScreen() {
   const toast = useToast();
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [links, setLinks] = useState<DocumentLink[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [categories, setCategories] = useState<TemplateCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchText, setSearchText] = useState('');
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState<number | 'all'>('all');
 
   const loadData = useCallback(async () => {
     try {
       setError('');
-      const lks = await documentLinksAPI.getAll();
-      setLinks(
-        (lks as ApiLink[]).map(l => ({
-          id: String(l.id),
-          title: l.title,
-          url: l.url,
-          category: l.category ?? 'General',
-          description: l.description,
-        }))
-      );
+      const [tmpls, cats] = await Promise.all([templatesAPI.getAll(), templatesAPI.getCategories()]);
+      setTemplates(tmpls as Template[]);
+      setCategories(cats as TemplateCategory[]);
     } catch {
-      setError('Could not load documents. Is the backend running?');
+      setError('Could not load templates. Is the backend running?');
     } finally {
       setLoading(false);
     }
@@ -62,37 +61,30 @@ export default function DocumentsScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const categories = useMemo(
-    () => ['all', ...Array.from(new Set(links.map(l => l.category)))],
-    [links]
-  );
+  const chips = useMemo(() => [{ id: 'all' as const, name: 'All' }, ...categories], [categories]);
 
-  const visible = links.filter(l => {
-    if (activeCategory !== 'all' && l.category !== activeCategory) return false;
-    if (searchText && !l.title.toLowerCase().includes(searchText.toLowerCase())) return false;
+  const visible = templates.filter(t => {
+    if (activeCategory !== 'all' && t.category_id !== activeCategory) return false;
+    if (searchText && !t.title.toLowerCase().includes(searchText.toLowerCase())) return false;
     return true;
   });
 
-  const handleOpen = (link: DocumentLink) => {
-    if (!link.url || link.url === '#') {
-      toast.info('Link unavailable', `"${link.title}" has no URL configured.`);
-      return;
-    }
-    Linking.openURL(link.url).catch(() =>
-      toast.error('Could not open', `Unable to open "${link.title}".`)
+  const handleDownload = (item: Template) => {
+    const url = templatesAPI.downloadUrl(item.id);
+    Linking.openURL(url).catch(() =>
+      toast.error('Could not open', `Unable to download "${item.title}".`)
     );
   };
 
   return (
     <View style={styles.flex}>
-      <Header title="Documents" subtitle="View & Download" showMenu onMenuPress={toggleDrawer} />
+      <Header title="Templates" subtitle="Forms & Document Templates" showBack onBack={() => router.back()} />
 
-      {/* Search Bar */}
       <View style={styles.searchRow}>
         <Ionicons name="search-outline" size={16} color={colors.text.muted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search documents..."
+          placeholder="Search templates..."
           placeholderTextColor={colors.text.muted}
           value={searchText}
           onChangeText={setSearchText}
@@ -105,22 +97,21 @@ export default function DocumentsScreen() {
         ) : null}
       </View>
 
-      {/* Category Chips */}
-      {categories.length > 1 && (
+      {chips.length > 1 && (
         <FlatList
           horizontal
-          data={categories}
-          keyExtractor={c => c}
+          data={chips}
+          keyExtractor={c => String(c.id)}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipRow}
           style={styles.chipScroll}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.chip, activeCategory === item && styles.chipActive]}
-              onPress={() => setActiveCategory(item)}
+              style={[styles.chip, activeCategory === item.id && styles.chipActive]}
+              onPress={() => setActiveCategory(item.id)}
             >
-              <Text style={[styles.chipText, activeCategory === item && styles.chipTextActive]}>
-                {item === 'all' ? 'All' : item}
+              <Text style={[styles.chipText, activeCategory === item.id && styles.chipTextActive]}>
+                {item.name}
               </Text>
             </TouchableOpacity>
           )}
@@ -134,29 +125,30 @@ export default function DocumentsScreen() {
       ) : (
         <FlatList
           data={visible}
-          keyExtractor={i => i.id}
+          keyExtractor={t => String(t.id)}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <EmptyState
-              icon="document-text-outline"
-              title="No documents found"
-              subtitle={searchText ? `No results for "${searchText}".` : 'No documents are available yet.'}
+              icon="file-tray-outline"
+              title="No templates found"
+              subtitle={searchText ? `No results for "${searchText}".` : 'No templates are available yet.'}
             />
           }
           renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => handleOpen(item)} activeOpacity={0.78}>
-              <Card style={styles.linkCard}>
-                <View style={styles.linkRow}>
-                  <View style={styles.linkIconWrap}>
-                    <MaterialCommunityIcons name="file-link-outline" size={20} color={colors.maroon.primary} />
+            <TouchableOpacity onPress={() => handleDownload(item)} activeOpacity={0.78}>
+              <Card style={styles.card}>
+                <View style={styles.row}>
+                  <View style={styles.iconWrap}>
+                    <MaterialCommunityIcons name="file-outline" size={20} color={colors.maroon.primary} />
+                    <Text style={styles.extBadge}>{item.file_ext.toUpperCase()}</Text>
                   </View>
-                  <View style={styles.linkInfo}>
-                    <Text style={styles.linkLabel} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.linkCategory}>{item.category}</Text>
-                    {item.description ? (
-                      <Text style={styles.linkDescription} numberOfLines={2}>{item.description}</Text>
-                    ) : null}
+                  <View style={styles.info}>
+                    <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.category}>{item.category_name}</Text>
+                    <Text style={styles.meta}>
+                      {item.uploaded_by} · {formatSize(item.file_size)}
+                    </Text>
                   </View>
                   <Ionicons name="download-outline" size={18} color={colors.text.muted} />
                 </View>
@@ -200,13 +192,16 @@ function createStyles(colors: ColorPalette) {
     chipTextActive: { color: colors.white },
 
     list: { padding: 16, paddingTop: 8, paddingBottom: 24 },
-
-    linkCard: { marginBottom: 8 },
-    linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    linkIconWrap: { width: 38, height: 38, backgroundColor: colors.maroon.muted, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-    linkInfo: { flex: 1 },
-    linkLabel: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
-    linkCategory: { fontSize: 11, color: colors.maroon.primary, fontWeight: '600', marginTop: 2 },
-    linkDescription: { fontSize: 12, color: colors.text.muted, marginTop: 3, lineHeight: 16 },
+    card: { marginBottom: 8 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    iconWrap: {
+      width: 44, height: 44, backgroundColor: colors.maroon.muted, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center', gap: 1,
+    },
+    extBadge: { fontSize: 8, fontWeight: '800', color: colors.maroon.primary, letterSpacing: 0.3 },
+    info: { flex: 1 },
+    title: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
+    category: { fontSize: 11, color: colors.maroon.primary, fontWeight: '600', marginTop: 2 },
+    meta: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
   });
 }

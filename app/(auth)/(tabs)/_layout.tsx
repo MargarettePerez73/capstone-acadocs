@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
-import { Colors } from '@/constants/Colors';
+import { useThemeColors } from '@/context/ThemeContext';
 
 // ─── Mobile scope ─────────────────────────────────────────────────────────────
 // Every role sees the same two tabs: Chat and Documents. No role-based
@@ -9,15 +9,17 @@ import { Colors } from '@/constants/Colors';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TabsLayout() {
+  const colors = useThemeColors();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.maroon.primary,
-        tabBarInactiveTintColor: Colors.text.muted,
+        tabBarActiveTintColor: colors.maroon.primary,
+        tabBarInactiveTintColor: colors.text.muted,
         tabBarStyle: {
-          backgroundColor: Colors.white,
-          borderTopColor: Colors.border,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           height: Platform.OS === 'ios' ? 82 : 64,
           paddingBottom: Platform.OS === 'ios' ? 22 : 8,
