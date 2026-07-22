@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-} from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth, DEMO_ACCOUNTS } from '@/context/AuthContext';
-import { useToast } from '@/context/ToastContext';
 import InlineError from '@/components/ui/InlineError';
-import { Colors } from '@/constants/Colors';
+import { ColorPalette } from '@/constants/Colors';
+import { useThemeColors } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useState, useMemo } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView, Platform,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity,
+  View,
+} from 'react-native';
 
 function validate(email: string, password: string) {
   const errors: { email?: string; password?: string } = {};
@@ -28,15 +33,14 @@ function validate(email: string, password: string) {
 export default function LoginScreen() {
   const { login } = useAuth();
   const toast = useToast();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
-
-  const getFieldErrors = () => validate(email, password);
 
   const handleBlur = (field: 'email' | 'password') => {
     setTouched(t => ({ ...t, [field]: true }));
@@ -58,7 +62,7 @@ export default function LoginScreen() {
       const success = await login(email.trim(), password);
       if (success) {
         toast.success('Login successful', 'Welcome back!');
-        router.replace('/(auth)/(tabs)/dashboard');
+        router.replace('/(auth)/(tabs)/chat');
       } else {
         toast.error('Login failed', 'Incorrect email or password. Please try again.');
         setErrors({ password: 'Incorrect email or password.' });
@@ -69,15 +73,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillCredentials = (acc: typeof DEMO_ACCOUNTS[0]) => {
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setErrors({});
-    setTouched({});
-    setShowDemo(false);
-    toast.info('Credentials loaded', `Ready to sign in as ${acc.role}.`);
   };
 
   const emailError = touched.email ? errors.email : undefined;
@@ -91,10 +86,10 @@ export default function LoginScreen() {
         <View style={styles.hero}>
           <View style={styles.logoRing}>
             <View style={styles.logoInner}>
-              <Ionicons name="school" size={42} color={Colors.white} />
+              <Ionicons name="school" size={42} color={colors.white} />
             </View>
           </View>
-          <Text style={styles.appName}>AcadTrack</Text>
+          <Text style={styles.appName}>Acadocs</Text>
           <Text style={styles.tagline}>Academic Submission{'\n'}& Monitoring System</Text>
           <View style={styles.heroDivider} />
           <Text style={styles.schoolLabel}>School Year 2024 — 2025</Text>
@@ -111,7 +106,7 @@ export default function LoginScreen() {
             <Ionicons
               name="mail-outline"
               size={17}
-              color={emailError ? Colors.status.missing : Colors.text.muted}
+              color={emailError ? colors.status.missing : colors.text.muted}
             />
             <TextInput
               style={styles.inputField}
@@ -119,14 +114,14 @@ export default function LoginScreen() {
               onChangeText={v => { setEmail(v); if (touched.email) setErrors(validate(v, password)); }}
               onBlur={() => handleBlur('email')}
               placeholder="yourname@school.edu"
-              placeholderTextColor={Colors.text.muted}
+              placeholderTextColor={colors.text.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
             />
             {email.length > 0 && !emailError && touched.email && (
-              <Ionicons name="checkmark-circle" size={16} color={Colors.status.submitted} />
+              <Ionicons name="checkmark-circle" size={16} color={colors.status.submitted} />
             )}
           </View>
           <InlineError message={emailError} />
@@ -137,7 +132,7 @@ export default function LoginScreen() {
             <Ionicons
               name="lock-closed-outline"
               size={17}
-              color={passwordError ? Colors.status.missing : Colors.text.muted}
+              color={passwordError ? colors.status.missing : colors.text.muted}
             />
             <TextInput
               style={styles.inputField}
@@ -145,7 +140,7 @@ export default function LoginScreen() {
               onChangeText={v => { setPassword(v); if (touched.password) setErrors(validate(email, v)); }}
               onBlur={() => handleBlur('password')}
               placeholder="Enter your password"
-              placeholderTextColor={Colors.text.muted}
+              placeholderTextColor={colors.text.muted}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               editable={!loading}
@@ -158,7 +153,7 @@ export default function LoginScreen() {
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                 size={17}
-                color={Colors.text.muted}
+                color={colors.text.muted}
               />
             </TouchableOpacity>
           </View>
@@ -173,51 +168,16 @@ export default function LoginScreen() {
           >
             {loading ? (
               <View style={styles.loginBtnInner}>
-                <ActivityIndicator color={Colors.white} size="small" />
+                <ActivityIndicator color={colors.white} size="small" />
                 <Text style={styles.loginBtnText}>Authenticating...</Text>
               </View>
             ) : (
               <View style={styles.loginBtnInner}>
                 <Text style={styles.loginBtnText}>Sign In</Text>
-                <Ionicons name="arrow-forward" size={18} color={Colors.white} />
+                <Ionicons name="arrow-forward" size={18} color={colors.white} />
               </View>
             )}
           </TouchableOpacity>
-
-          {/* Demo Credentials */}
-          <TouchableOpacity style={styles.demoToggle} onPress={() => setShowDemo(v => !v)} disabled={loading}>
-            <Ionicons name="information-circle-outline" size={15} color={Colors.maroon.primary} />
-            <Text style={styles.demoToggleText}>
-              {showDemo ? 'Hide' : 'View'} demo accounts
-            </Text>
-            <Ionicons name={showDemo ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.maroon.primary} />
-          </TouchableOpacity>
-
-          {showDemo && (
-            <View style={styles.demoGrid}>
-              <Text style={styles.demoGridTitle}>Tap a role to fill credentials</Text>
-              {DEMO_ACCOUNTS.map(acc => (
-                <TouchableOpacity
-                  key={acc.email}
-                  style={styles.demoCard}
-                  onPress={() => fillCredentials(acc)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.demoAvatar, { backgroundColor: acc.color }]}>
-                    <Text style={styles.demoAvatarText}>{acc.initials}</Text>
-                  </View>
-                  <View style={styles.demoCardInfo}>
-                    <Text style={styles.demoCardName}>{acc.label}</Text>
-                    <Text style={styles.demoCardRole}>{acc.role}</Text>
-                    <Text style={styles.demoCardEmail}>{acc.email}</Text>
-                  </View>
-                  <View style={[styles.demoBadge, { backgroundColor: acc.color + '18' }]}>
-                    <Text style={[styles.demoBadgeText, { color: acc.color }]}>{acc.password}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
         </View>
 
         {/* ── Footer ── */}
@@ -230,151 +190,105 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.maroon.primary },
-  scroll: { flexGrow: 1 },
+function createStyles(colors: ColorPalette) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.maroon.primary },
+    scroll: { flexGrow: 1 },
 
-  hero: {
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 72 : 54,
-    paddingBottom: 36,
-    paddingHorizontal: 24,
-  },
-  logoRing: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  logoInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  appName: { fontSize: 34, fontWeight: '800', color: Colors.white, letterSpacing: 1.5, marginBottom: 6 },
-  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.72)', textAlign: 'center', lineHeight: 21 },
-  heroDivider: { width: 36, height: 2, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2, marginVertical: 14 },
-  schoolLabel: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' },
+    hero: {
+      alignItems: 'center',
+      paddingTop: Platform.OS === 'ios' ? 72 : 54,
+      paddingBottom: 36,
+      paddingHorizontal: 24,
+    },
+    logoRing: {
+      width: 104,
+      height: 104,
+      borderRadius: 52,
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      borderWidth: 1.5,
+      borderColor: 'rgba(255,255,255,0.25)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 18,
+    },
+    logoInner: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    appName: { fontSize: 34, fontWeight: '800', color: colors.white, letterSpacing: 1.5, marginBottom: 6 },
+    tagline: { fontSize: 14, color: 'rgba(255,255,255,0.72)', textAlign: 'center', lineHeight: 21 },
+    heroDivider: { width: 36, height: 2, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2, marginVertical: 14 },
+    schoolLabel: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' },
 
-  card: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 30,
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    flex: 1,
-    minHeight: 420,
-  },
-  cardTitle: { fontSize: 21, fontWeight: '800', color: Colors.text.primary, marginBottom: 5 },
-  cardSub: { fontSize: 13, color: Colors.text.secondary, marginBottom: 24, lineHeight: 18 },
+    card: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 30,
+      borderTopRightRadius: 30,
+      paddingTop: 30,
+      paddingHorizontal: 24,
+      paddingBottom: 20,
+      flex: 1,
+      minHeight: 420,
+    },
+    cardTitle: { fontSize: 21, fontWeight: '800', color: colors.text.primary, marginBottom: 5 },
+    cardSub: { fontSize: 13, color: colors.text.secondary, marginBottom: 24, lineHeight: 18 },
 
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.background,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    paddingHorizontal: 14,
-    height: 52,
-  },
-  inputRowError: {
-    borderColor: Colors.status.missing,
-    backgroundColor: '#FFF5F5',
-  },
-  inputField: { flex: 1, fontSize: 15, color: Colors.text.primary },
+    fieldLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.text.primary,
+      marginBottom: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      height: 52,
+    },
+    inputRowError: {
+      borderColor: colors.status.missing,
+      backgroundColor: colors.maroon.surface,
+    },
+    inputField: { flex: 1, fontSize: 15, color: colors.text.primary },
 
-  loginBtn: {
-    backgroundColor: Colors.maroon.primary,
-    borderRadius: 12,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 22,
-    marginBottom: 16,
-    elevation: 3,
-    shadowColor: Colors.maroon.dark,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  loginBtnLoading: { opacity: 0.8 },
-  loginBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
+    loginBtn: {
+      backgroundColor: colors.maroon.primary,
+      borderRadius: 12,
+      height: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 22,
+      marginBottom: 16,
+      elevation: 3,
+      shadowColor: colors.maroon.dark,
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    loginBtnLoading: { opacity: 0.8 },
+    loginBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    loginBtnText: { color: colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
 
-  demoToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  demoToggleText: { fontSize: 13, color: Colors.maroon.primary, fontWeight: '600' },
-
-  demoGrid: {
-    marginTop: 10,
-    marginBottom: 8,
-    backgroundColor: Colors.maroon.surface,
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  demoGridTitle: {
-    fontSize: 11,
-    color: Colors.text.muted,
-    textAlign: 'center',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    fontWeight: '600',
-  },
-  demoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    padding: 12,
-    gap: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  demoAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  demoAvatarText: { color: Colors.white, fontSize: 14, fontWeight: '800' },
-  demoCardInfo: { flex: 1 },
-  demoCardName: { fontSize: 13, fontWeight: '700', color: Colors.text.primary },
-  demoCardRole: { fontSize: 11, color: Colors.text.secondary, fontWeight: '600', marginTop: 1 },
-  demoCardEmail: { fontSize: 10, color: Colors.text.muted, marginTop: 1 },
-  demoBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
-  demoBadgeText: { fontSize: 11, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: Colors.maroon.dark,
-    paddingVertical: 14,
-  },
-  footerText: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 },
-});
+    footer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: colors.maroon.dark,
+      paddingVertical: 14,
+    },
+    footerText: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 },
+  });
+}
